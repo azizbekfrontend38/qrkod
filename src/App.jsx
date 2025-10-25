@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { QRCodeCanvas } from "qrcode.react";
 import Tesseract from "tesseract.js";
 import * as XLSX from "xlsx";
@@ -7,13 +7,37 @@ import { saveAs } from "file-saver";
 import { Toaster, toast } from "react-hot-toast";
 
 export default function App() {
-  const [files, setFiles] = useState([]); // har bir fayl: {file, numbers: []}
+  const [files, setFiles] = useState([]);
   const [activeIndex, setActiveIndex] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [manualNumbers, setManualNumbers] = useState([]); // qo‘lda kiritilgan raqamlar
+  const [manualNumbers, setManualNumbers] = useState([]);
   const [inputValue, setInputValue] = useState("");
 
-  // 📂 Faylni tanlash va o‘qish
+  // 🔄 LocalStorage'dan o‘qish
+  useEffect(() => {
+    const savedFiles = localStorage.getItem("qr_files");
+    const savedManual = localStorage.getItem("qr_manual_numbers");
+    const savedIndex = localStorage.getItem("qr_active_index");
+
+    if (savedFiles) setFiles(JSON.parse(savedFiles));
+    if (savedManual) setManualNumbers(JSON.parse(savedManual));
+    if (savedIndex) setActiveIndex(JSON.parse(savedIndex));
+  }, []);
+
+  // 💾 LocalStorage'ga yozish
+  useEffect(() => {
+    localStorage.setItem("qr_files", JSON.stringify(files));
+  }, [files]);
+
+  useEffect(() => {
+    localStorage.setItem("qr_manual_numbers", JSON.stringify(manualNumbers));
+  }, [manualNumbers]);
+
+  useEffect(() => {
+    localStorage.setItem("qr_active_index", JSON.stringify(activeIndex));
+  }, [activeIndex]);
+
+  // 📂 Faylni tanlash
   const handleFile = async (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -40,9 +64,10 @@ export default function App() {
         numbers = extractNumbers(text);
       }
 
-      const newFile = { file, numbers };
-      setFiles((prev) => [...prev, newFile]);
-      setActiveIndex(files.length);
+      const newFile = { file: { name: file.name }, numbers };
+      const updated = [...files, newFile];
+      setFiles(updated);
+      setActiveIndex(updated.length - 1);
       toast.success(`${numbers.length} ta raqam topildi!`);
     } catch (err) {
       console.error(err);
@@ -60,7 +85,8 @@ export default function App() {
 
   // ❌ Faylni o‘chirish
   const removeFile = (index) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
+    const updated = files.filter((_, i) => i !== index);
+    setFiles(updated);
     if (index === activeIndex) setActiveIndex(null);
     toast("🗑️ Fayl o‘chirildi");
   };
@@ -75,7 +101,7 @@ export default function App() {
     a.click();
   };
 
-  // 📦 Barcha QR kodlarni ZIP qilib yuklab olish
+  // 📦 ZIP qilib yuklab olish
   const downloadAllQRs = async () => {
     const currentFile = files[activeIndex];
     if (!currentFile || currentFile.numbers.length === 0)
@@ -95,13 +121,13 @@ export default function App() {
     toast.success("✅ Barcha QR kodlar ZIP faylda yuklab olindi!");
   };
 
-  // 📋 Raqamni nusxalash
+  // 📋 Nusxalash
   const copyNumber = (num) => {
     navigator.clipboard.writeText(num);
     toast("📋 Raqam nusxalandi!", { icon: "✅" });
   };
 
-  // ➕ Qo‘lda raqam kiritish
+  // ➕ Qo‘lda raqam qo‘shish
   const addManualNumber = () => {
     const trimmed = inputValue.trim();
     if (!/^\d+$/.test(trimmed)) return toast.error("Faqat raqam kiriting!");
@@ -121,7 +147,7 @@ export default function App() {
   const activeFile = files[activeIndex];
 
   return (
-    <div className="min-h-screen  from-blue-50 to-blue-100 flex flex-col items-center py-10 px-4 transition">
+    <div className="min-h-screen from-blue-50 to-blue-100 flex flex-col items-center py-10 px-4 transition">
       <Toaster position="top-center" />
 
       <h1 className="text-4xl font-extrabold mb-3 text-center text-blue-700">
@@ -231,14 +257,13 @@ export default function App() {
                   key={i}
                   className="relative bg-white p-4 rounded-xl shadow flex flex-col items-center transform hover:scale-105 transition"
                 >
-                  <button
-                    onClick={() => removeFile(i)}
-                    className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-lg"
-                  >
-                  ❌
-                  </button>
+                  {/* 🔢 Kattalashgan tartib raqami */}
+                  <div className="absolute top-2 left-2 bg-blue-600 text-white text-lg font-extrabold rounded-full w-10 h-10 flex items-center justify-center shadow-md">
+                    {i + 1}
+                  </div>
+
                   <QRCodeCanvas id={`qr-${num}`} value={num} size={160} />
-                  <p className="mt-3 text-lg font-semibold text-black">{num}</p>
+                  <p className="mt-3 text-2xl font-bold text-black">{num}</p>
                   <div className="flex gap-2 mt-2">
                     <button
                       onClick={() => copyNumber(num)}
@@ -270,14 +295,19 @@ export default function App() {
                 key={i}
                 className="relative bg-white p-4 rounded-xl shadow flex flex-col items-center transform hover:scale-105 transition"
               >
+                <div className="absolute top-2 left-2 bg-blue-600 text-white text-lg font-extrabold rounded-full w-10 h-10 flex items-center justify-center shadow-md">
+                  {i + 1}
+                </div>
+
                 <button
                   onClick={() => removeManualQR(num)}
                   className="absolute top-2 right-2 text-red-500 hover:text-red-700 text-lg"
                 >
                   ❌
                 </button>
+
                 <QRCodeCanvas id={`manualqr-${num}`} value={num} size={160} />
-                <p className="mt-3 text-lg font-semibold text-black">{num}</p>
+                <p className="mt-3 text-2xl font-bold text-black">{num}</p>
                 <div className="flex gap-2 mt-2">
                   <button
                     onClick={() => copyNumber(num)}
